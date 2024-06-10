@@ -247,7 +247,7 @@ fn get_all_states(
     opensky_res: Res<OpenSkyResource>,
 ) {
     for req in events.read() {
-        info!("GetAllStates: {:?}", req);
+        debug!("request state: {:?}", req);
         let api_url = "https://opensky-network.org/api/states/all";
         let mut url = Url::parse(api_url).unwrap();
         if let Some(time) = req.time {
@@ -316,8 +316,8 @@ fn handle_state_response(
                 }
                 commands.spawn_batch(new_batches);
             }
-            Err(e) => {
-                error!("Error: {:?}", e);
+            Err(_e) => {
+                error!("Error: {:?}", response.text());
                 return;
             }
         }
