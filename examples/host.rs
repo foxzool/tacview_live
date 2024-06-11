@@ -2,17 +2,20 @@ use bevy::input::common_conditions::input_toggle_active;
 use bevy::prelude::*;
 use bevy_activation::ActivationPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
+use bevy_octopus::plugin::OctopusPlugin;
 use bevy_tacview::{TACVIEW_CHANNEL, TacviewPlugin, TacviewResource};
-use bevy_tacview::octopus::prelude::ListenTo;
+use bevy_octopus::prelude::ListenTo;
 use chrono::Utc;
 use dotenvy::dotenv;
 
+use tacview_live::aisstream::{AISStreamPlugin, AISStreamResource};
 use tacview_live::opensky::OpenSkyPlugin;
 
 fn main() {
     dotenv().expect(".env file not found");
     let username = std::env::var("OPENSKY_USERNAME").ok();
     let password = std::env::var("OPENSKY_PASSWORD").ok();
+    let api_key = std::env::var("AISSTREAM_KEY").unwrap();
     App::new()
         .add_plugins(DefaultPlugins)
         .add_plugins(
@@ -20,11 +23,16 @@ fn main() {
         )
         .add_plugins(OpenSkyPlugin { username, password })
         .add_plugins(ActivationPlugin)
+        .add_plugins(OctopusPlugin)
         .add_plugins(TacviewPlugin)
+        .insert_resource(AISStreamResource {
+            api_key
+        })
+        // .add_plugins(AISStreamPlugin)
         .add_systems(Startup, setup)
         .run()
 }
-
+//
 fn setup(mut host_res: ResMut<TacviewResource>, mut commands: Commands) {
     *host_res = TacviewResource {
         title: "bevy tacview sample".to_string(),

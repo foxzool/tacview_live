@@ -265,7 +265,6 @@ fn get_all_states(
         }
 
         let req = if let Some(auth) = opensky_res.auth.as_ref() {
-            println!("auth : {}", auth);
             HttpClient::new()
                 .headers(&[
                     ("Content-Type", "application/json"),
@@ -369,7 +368,7 @@ fn watch_changed(
 
 fn watch_timeout(mut ev_timeout: EventReader<TimeoutEvent>, mut commands: Commands) {
     for timeout in ev_timeout.read() {
-        info!("Timeout: {:?}", timeout);
+        debug!("Timeout: {:?}", timeout);
         commands.entity(timeout.0).insert(ObjectNeedSync::Destroy);
     }
 }
