@@ -1,15 +1,15 @@
 use bevy::input::common_conditions::input_toggle_active;
+use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy_activation::ActivationPlugin;
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_octopus::plugin::OctopusPlugin;
-use bevy_tacview::{TACVIEW_CHANNEL, TacviewPlugin, TacviewResource};
 use bevy_octopus::prelude::ListenTo;
+use bevy_tacview::{TACVIEW_CHANNEL, TacviewPlugin, TacviewResource};
 use chrono::Utc;
 use dotenvy::dotenv;
 
 use tacview_live::aisstream::{AISStreamPlugin, AISStreamResource};
-use tacview_live::opensky::OpenSkyPlugin;
 
 fn main() {
     dotenv().expect(".env file not found");
@@ -17,18 +17,19 @@ fn main() {
     let password = std::env::var("OPENSKY_PASSWORD").ok();
     let api_key = std::env::var("AISSTREAM_KEY").unwrap();
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(LogPlugin {
+            filter: "bevy_octopus=debug".to_string(),
+            ..default()
+        }))
         .add_plugins(
             WorldInspectorPlugin::default().run_if(input_toggle_active(true, KeyCode::Escape)),
         )
-        .add_plugins(OpenSkyPlugin { username, password })
+        // .add_plugins(OpenSkyPlugin { username, password })
         .add_plugins(ActivationPlugin)
         .add_plugins(OctopusPlugin)
         .add_plugins(TacviewPlugin)
-        .insert_resource(AISStreamResource {
-            api_key
-        })
-        // .add_plugins(AISStreamPlugin)
+        .insert_resource(AISStreamResource { api_key })
+        .add_plugins(AISStreamPlugin)
         .add_systems(Startup, setup)
         .run()
 }
