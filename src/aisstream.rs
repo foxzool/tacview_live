@@ -1,8 +1,15 @@
+use std::collections::{HashMap, HashSet};
+use std::time::Duration;
+
 use bevy::prelude::*;
-use bevy::utils::HashMap;
+use bevy_activation::ActiveState;
 use bevy_octopus::prelude::*;
+use bevy_tacview::record::{Coords, Property, PropertyList, Tag};
+use bevy_tacview::systems::ObjectNeedSync;
 use chrono::NaiveDateTime;
 use serde::{Deserialize, Deserializer, Serialize};
+
+use crate::opensky::StateVector;
 
 const AISSTREAM_CHANNEL: ChannelId = ChannelId("AIS");
 
@@ -11,8 +18,11 @@ pub struct AISStreamPlugin;
 impl Plugin for AISStreamPlugin {
     fn build(&self, app: &mut App) {
         app.init_resource::<MSSIIndex>()
+            .register_type::<MetaData>()
+            .register_type::<PositionReport>()
             .add_systems(Startup, setup)
-            .add_systems(Update, (handle_connect, handle_raw_packet));
+            .add_systems(Update, (handle_connect, handle_raw_packet))
+            .add_systems(Update, (watch_added, watch_changed));
     }
 }
 
@@ -51,10 +61,10 @@ fn handle_connect(
                 let node = q_net_node.get(*entity).unwrap();
                 let sub = serde_json::json!({
                     "APIKey": res.api_key,
-                    "BoundingBoxes": [[[-180, -90], [180, 90]]],
-                    "FilterMessageTypes": ["PositionReport"]
+                    "BoundingBoxes": [[[3.2063329870791444, 97.4267578125], [29.477861195816843, 141.48193359375003 ]]],
+                    // "BoundingBoxes": [[[97.4267578125, 3.2063329870791444], [141.48193359375003, 29.477861195816843]]],
+                    // "FilterMessageTypes": ["PositionReport"]
                 });
-                println!("sub {}", sub);
                 node.send_text(sub.to_string())
             }
             NetworkEvent::Disconnected => {
@@ -88,7 +98,7 @@ struct MSSIIndex(HashMap<i32, Entity>);
 fn handle_raw_packet(
     q_server: Query<(&ChannelId, &NetworkNode)>,
     mut commands: Commands,
-    mut q_vessels: Query<(&mut MetaData, &mut PositionReport)>,
+    mut q_vessels: Query<(&mut MetaData, )>,
     mut mssi_index: ResMut<MSSIIndex>,
 ) {
     for (channel_id, net_node) in q_server.iter() {
@@ -101,22 +111,22 @@ fn handle_raw_packet(
                         error!("AuthError: {:?}", e.error);
                     }
                     AuthMessage::Message(m) => {
-                        let position_report: PositionReport =
-                            serde_json::from_value(m["Message"]["PositionReport"].clone()).unwrap();
-                        trace!("position_report: {:?}", position_report);
+                        // let position_report: PositionReport =
+                        //     serde_json::from_value(m["Message"]["PositionReport"].clone()).unwrap();
+                        // trace!("position_report: {:?}", position_report);
                         let meta_data: MetaData =
                             serde_json::from_value(m["MetaData"].clone()).unwrap();
                         trace!("meta_data: {:?}", meta_data);
                         if let Some(entity) = mssi_index.get(&meta_data.mmsi) {
-                            if let Ok((mut meta_data_comp, mut position_report_comp)) =
+                            if let Ok((mut meta_data_comp, )) =
                                 q_vessels.get_mut(*entity)
                             {
                                 meta_data_comp.set_if_neq(meta_data);
-                                position_report_comp.set_if_neq(position_report);
+                                // position_report_comp.set_if_neq(position_report);
                             }
                         } else {
                             let mssi = meta_data.mmsi;
-                            let entity = commands.spawn((meta_data, position_report)).id();
+                            let entity = commands.spawn((meta_data, )).id();
                             mssi_index.insert(mssi, entity);
                         }
                     }
@@ -126,7 +136,7 @@ fn handle_raw_packet(
     }
 }
 
-#[derive(Debug, Deserialize, Component, PartialEq)]
+#[derive(Debug, Deserialize, Component, Reflect, PartialEq)]
 struct PositionReport {
     #[serde(rename = "MessageID")]
     message_id: i32,
@@ -164,7 +174,7 @@ struct PositionReport {
     communication_state: i32,
 }
 
-#[derive(Debug, Deserialize, Component, PartialEq)]
+#[derive(Debug, Deserialize, Component, Reflect, PartialEq)]
 struct MetaData {
     #[serde(rename = "MMSI")]
     mmsi: i32,
@@ -172,10 +182,11 @@ struct MetaData {
     ship_name: String,
     longitude: f64,
     latitude: f64,
-    #[serde(deserialize_with = "decode_time_utc")]
-    time_utc: NaiveDateTime,
+    // #[serde(deserialize_with = "decode_time_utc")]
+    time_utc: String,
 }
 
+#[allow(dead_code)]
 fn decode_time_utc<'de, D>(deserializer: D) -> Result<NaiveDateTime, D::Error>
 where
     D: Deserializer<'de>,
@@ -185,4 +196,63 @@ where
         .expect("Failed to parse date time");
 
     Ok(naive_dt)
+}
+
+fn watch_added(query: Query<(Entity, &MetaData), (Added<MetaData>,)>, mut commands: Commands) {
+    for (e, meta_data) in query.iter() {
+        trace!("Added: {} {}", meta_data.mmsi, meta_data.ship_name);
+        let coord = to_coords(meta_data);
+        let props = to_props(meta_data);
+
+        commands.entity(e).insert((
+            coord,
+            PropertyList(props),
+            ObjectNeedSync::Spawn,
+            ActiveState::new(Duration::from_secs(60)),
+        ));
+    }
+}
+
+fn watch_changed(
+    mut query: Query<
+        (
+            Entity,
+            &MetaData,
+            &mut Coords,
+            &mut PropertyList,
+            &mut ActiveState,
+        ),
+        Changed<StateVector>,
+    >,
+    mut commands: Commands,
+) {
+    for (entity, meta_data, mut coords, mut props_list, mut active_state) in query.iter_mut() {
+        coords.set_if_neq(to_coords(&meta_data));
+        props_list.set_if_neq(PropertyList(to_props(&meta_data)));
+        active_state.toggle();
+        commands.entity(entity).insert(ObjectNeedSync::Update);
+    }
+}
+
+fn to_coords(position_report: &MetaData) -> Coords {
+    Coords {
+        longitude: Some(position_report.longitude),
+        latitude: Some(position_report.latitude),
+        altitude: Some(0.0),
+        u: None,
+        v: None,
+        roll: None,
+        pitch: None,
+        yaw: None,
+        heading: None,
+    }
+}
+
+fn to_props(meta_data: &MetaData) -> Vec<Property> {
+    let list = vec![
+        Property::CallSign(meta_data.ship_name.clone()),
+        Property::Type(HashSet::from_iter([Tag::Watercraft])),
+    ];
+
+    list
 }

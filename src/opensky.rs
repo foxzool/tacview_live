@@ -1,14 +1,15 @@
+use std::collections::HashSet;
 use std::time::Duration;
 
 use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_real_timer;
-use bevy_activation::{ActiveState, TimeoutEvent};
+use bevy_activation::ActiveState;
 use bevy_http_client::{
     HttpClient, HttpClientPlugin, HttpRequest, HttpResponse, HttpResponseError,
 };
-use bevy_tacview::record::{Coords, Property, PropertyList};
+use bevy_tacview::record::{Coords, Property, PropertyList, Tag};
 use bevy_tacview::systems::ObjectNeedSync;
 use serde::Deserialize;
 use url::Url;
@@ -34,7 +35,6 @@ impl Plugin for OpenSkyPlugin {
                     handle_error,
                     watch_added,
                     watch_changed,
-                    watch_timeout,
                 ),
             );
     }
@@ -358,18 +358,11 @@ fn watch_changed(
     mut commands: Commands,
 ) {
     for (entity, state, mut coords, mut props_list, mut active_state) in query.iter_mut() {
-        debug!("Changed: {:?} after {}", state.icao24, state.last_contact);
+        trace!("Changed: {:?} after {}", state.icao24, state.last_contact);
         coords.set_if_neq(to_coords(state));
         props_list.set_if_neq(PropertyList(to_props(state)));
         active_state.toggle();
         commands.entity(entity).insert(ObjectNeedSync::Update);
-    }
-}
-
-fn watch_timeout(mut ev_timeout: EventReader<TimeoutEvent>, mut commands: Commands) {
-    for timeout in ev_timeout.read() {
-        debug!("Timeout: {:?}", timeout);
-        commands.entity(timeout.0).insert(ObjectNeedSync::Destroy);
     }
 }
 
@@ -392,6 +385,7 @@ fn to_props(state: &StateVector) -> Vec<Property> {
         Property::Name(state.icao24.clone()),
         Property::ICAO24(state.icao24.clone()),
         Property::Country(state.origin_country.clone()),
+        Property::Type(HashSet::from_iter([Tag::FixedWing])),
     ];
 
     if let Some(call_sign) = state.callsign.as_ref() {

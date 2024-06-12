@@ -1,15 +1,17 @@
 use bevy::input::common_conditions::input_toggle_active;
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
-use bevy_activation::ActivationPlugin;
+use bevy_activation::{ActivationPlugin, TimeoutEvent};
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_octopus::plugin::OctopusPlugin;
 use bevy_octopus::prelude::ListenTo;
 use bevy_tacview::{TACVIEW_CHANNEL, TacviewPlugin, TacviewResource};
+use bevy_tacview::systems::ObjectNeedSync;
 use chrono::Utc;
 use dotenvy::dotenv;
 
-use tacview_live::aisstream::{AISStreamPlugin, AISStreamResource};
+pub mod opensky;
+pub mod aisstream;
 
 fn main() {
     dotenv().expect(".env file not found");
@@ -18,19 +20,20 @@ fn main() {
     let api_key = std::env::var("AISSTREAM_KEY").unwrap();
     App::new()
         .add_plugins(DefaultPlugins.set(LogPlugin {
-            filter: "bevy_octopus=debug".to_string(),
+            filter: "bevy_octopus=trace,tacview_live=debug".to_string(),
             ..default()
         }))
         .add_plugins(
             WorldInspectorPlugin::default().run_if(input_toggle_active(true, KeyCode::Escape)),
         )
-        // .add_plugins(OpenSkyPlugin { username, password })
+        // .add_plugins(tacview_live::opensky::OpenSkyPlugin { username, password })
         .add_plugins(ActivationPlugin)
         .add_plugins(OctopusPlugin)
         .add_plugins(TacviewPlugin)
-        .insert_resource(AISStreamResource { api_key })
-        .add_plugins(AISStreamPlugin)
+        .insert_resource(aisstream::AISStreamResource { api_key })
+        .add_plugins(aisstream::AISStreamPlugin)
         .add_systems(Startup, setup)
+        .add_systems(Update, watch_timeout)
         .run()
 }
 //
@@ -48,4 +51,11 @@ fn setup(mut host_res: ResMut<TacviewResource>, mut commands: Commands) {
         data_recorder: "TacviewHost Example".to_string(),
     };
     commands.spawn((TACVIEW_CHANNEL, ListenTo::new("tcp://0.0.0.0:42674")));
+}
+
+fn watch_timeout(mut ev_timeout: EventReader<TimeoutEvent>, mut commands: Commands) {
+    for timeout in ev_timeout.read() {
+        debug!("Timeout: {:?}", timeout);
+        commands.entity(timeout.0).insert(ObjectNeedSync::Destroy);
+    }
 }
