@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use bevy::prelude::*;
 use bevy_activation::ActiveState;
+use bevy_inspector_egui::quick::ResourceInspectorPlugin;
 use bevy_octopus::prelude::*;
 use bevy_tacview::record::{Coords, Property, PropertyList, Tag};
 use bevy_tacview::systems::ObjectNeedSync;
@@ -20,6 +21,8 @@ impl Plugin for AISStreamPlugin {
         app.init_resource::<MSSIIndex>()
             .register_type::<MetaData>()
             .register_type::<PositionReport>()
+            .register_type::<MSSIIndex>()
+            .add_plugins(ResourceInspectorPlugin::<MSSIIndex>::default())
             .add_systems(Startup, setup)
             .add_systems(Update, (handle_connect, handle_raw_packet))
             .add_systems(Update, (watch_added, watch_changed));
@@ -92,7 +95,7 @@ struct AuthError {
 
 type Message = serde_json::Value;
 
-#[derive(Resource, Default, Deref, DerefMut)]
+#[derive(Resource, Default, Deref, Reflect, DerefMut)]
 struct MSSIIndex(HashMap<i32, Entity>);
 
 fn handle_raw_packet(
@@ -208,7 +211,7 @@ fn watch_added(query: Query<(Entity, &MetaData), (Added<MetaData>,)>, mut comman
             coord,
             PropertyList(props),
             ObjectNeedSync::Spawn,
-            ActiveState::new(Duration::from_secs(60)),
+            ActiveState::always(),
         ));
     }
 }

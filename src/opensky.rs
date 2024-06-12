@@ -1,14 +1,15 @@
 use std::collections::HashSet;
 use std::time::Duration;
 
-use base64::Engine;
 use base64::prelude::BASE64_STANDARD;
+use base64::Engine;
 use bevy::prelude::*;
 use bevy::time::common_conditions::on_real_timer;
 use bevy_activation::ActiveState;
 use bevy_http_client::{
     HttpClient, HttpClientPlugin, HttpRequest, HttpResponse, HttpResponseError,
 };
+use bevy_inspector_egui::quick::ResourceInspectorPlugin;
 use bevy_tacview::record::{Coords, Property, PropertyList, Tag};
 use bevy_tacview::systems::ObjectNeedSync;
 use serde::Deserialize;
@@ -24,8 +25,11 @@ impl Plugin for OpenSkyPlugin {
     fn build(&self, app: &mut App) {
         app.add_plugins(HttpClientPlugin)
             .insert_resource(OpenSkyResource::new(&self.username, &self.password))
+            .init_resource::<OpenSKyController>()
             .add_event::<StateRequest>()
             .register_type::<StateVector>()
+            .register_type::<OpenSKyController>()
+            .add_plugins(ResourceInspectorPlugin::<OpenSKyController>::default())
             .add_systems(
                 Update,
                 (
@@ -43,6 +47,11 @@ impl Plugin for OpenSkyPlugin {
 #[derive(Resource, Debug)]
 pub struct OpenSkyResource {
     pub auth: Option<String>,
+}
+
+#[derive(Resource, Reflect, Default)]
+pub struct OpenSKyController {
+    pub open: bool,
 }
 
 impl OpenSkyResource {
@@ -228,17 +237,22 @@ impl From<InnerStateVector> for StateVector {
     }
 }
 
-fn refresh_states(mut state_req: EventWriter<StateRequest>) {
-    state_req.send(StateRequest {
-        bounding_box: Some(BoundingBox {
-            min_lat: 3.2063329870791444,
-            max_lat: 29.477861195816843,
-            min_lon: 97.4267578125,
-            max_lon: 141.48193359375003,
-        }),
+fn refresh_states(
+    mut state_req: EventWriter<StateRequest>,
+    open_sky_controller: Res<OpenSKyController>,
+) {
+    if open_sky_controller.open {
+        state_req.send(StateRequest {
+            bounding_box: Some(BoundingBox {
+                min_lat: 3.2063329870791444,
+                max_lat: 29.477861195816843,
+                min_lon: 97.4267578125,
+                max_lon: 141.48193359375003,
+            }),
 
-        ..default()
-    });
+            ..default()
+        });
+    }
 }
 
 fn get_all_states(

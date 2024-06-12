@@ -1,4 +1,3 @@
-use bevy::input::common_conditions::input_toggle_active;
 use bevy::log::LogPlugin;
 use bevy::prelude::*;
 use bevy_activation::{ActivationPlugin, TimeoutEvent};
@@ -10,8 +9,8 @@ use bevy_tacview::systems::ObjectNeedSync;
 use chrono::Utc;
 use dotenvy::dotenv;
 
-pub mod opensky;
 pub mod aisstream;
+pub mod opensky;
 
 fn main() {
     dotenv().expect(".env file not found");
@@ -23,10 +22,8 @@ fn main() {
             filter: "bevy_octopus=trace,tacview_live=debug".to_string(),
             ..default()
         }))
-        .add_plugins(
-            WorldInspectorPlugin::default().run_if(input_toggle_active(true, KeyCode::Escape)),
-        )
-        // .add_plugins(tacview_live::opensky::OpenSkyPlugin { username, password })
+        .add_plugins(WorldInspectorPlugin::new())
+        .add_plugins(opensky::OpenSkyPlugin { username, password })
         .add_plugins(ActivationPlugin)
         .add_plugins(OctopusPlugin)
         .add_plugins(TacviewPlugin)
