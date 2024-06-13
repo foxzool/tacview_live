@@ -7,9 +7,10 @@ edition = "2021"
 bevy = "0.13"
 bevy-inspector-egui = "0.24"
 bevy_http_client = "0.5"
-#bevy_octopus = { git = "https://github.com/foxzool/bevy_octopus.git", features = ["websocket", "async-tls", "serde_json"] }
-bevy_octopus = { path = "../bevy_octopus", features = ["websocket", "async-tls", "serde_json"] }
-bevy_tacview = { path = "../bevy_tacview" }
+bevy_octopus = { git = "https://github.com/foxzool/bevy_octopus.git", features = ["websocket", "async-tls", "serde_json"] }
+#bevy_octopus = { path = "../bevy_octopus", features = ["websocket", "async-tls", "serde_json"] }
+bevy_tacview = { git = "https://github.com/foxzool/bevy_tacview.git" }
+#bevy_tacview = { path = "../bevy_tacview" }
 bevy_activation = "0.1"
 serde = { version = "1.0.203", features = ["derive"] }
 serde_json = "1"
